@@ -65,3 +65,19 @@ video.live.play { transform: none; object-fit: contain; }
 .tip p { margin: 4px 0 0; color: var(--muted); font-size: 15px; }
 .checks { display: grid; gap: 8px; }
 .checks label { flex-direction: row; gap: 10px; color: var(--ink); font-size: 15px; }
+button.link { border: 0; background: none; padding: 0; color: var(--ink); text-decoration: underline; font-size: inherit; }
+.note { background: var(--soft); padding: 10px 14px; border-radius: 8px; font-size: 14px; margin: 12px 0; }
+input[list], .add input, details input, .filters input, .edit input { font: inherit; font-size: 15px; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--line); background: #fff; color: var(--ink); }
+.add { display: grid; gap: 8px; }
+.add button { justify-self: start; }
+details { margin-top: 12px; } details summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+details > * { display: block; margin-top: 8px; }
+.filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.filters input { flex: 1; min-width: 140px; }
+.filters button { font-size: 13px; padding: 8px 12px; }
+.qrow { display: flex; gap: 12px; align-items: flex-start; border-top: 1px solid var(--line); padding: 14px 0; }
+.qrow.off .qtext { opacity: .4; }
+.qrow input[type=checkbox] { margin-top: 6px; }
+.qtext { flex: 1; } .qtext small { color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-size: 11px; } .qtext p { margin: 2px 0 0; }
+.qact { display: flex; gap: 6px; } .qact button { font-size: 13px; padding: 6px 10px; }
+.edit { flex: 1; display: grid; gap: 8px; } .edit button { justify-self: start; }

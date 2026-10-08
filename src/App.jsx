@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { QUESTIONS, CATEGORIES, PRACTICE_QUESTION, TIPS } from './questions.js';
+import { CATEGORIES, PRACTICE_QUESTION, TIPS } from './questions.js';
+import { loadBank, saveBank, drawQuestions } from './bank.js';
+import QuestionBank from './QuestionBank.jsx';
 import { saveSession, listSessions, deleteSession } from './db.js';
 
-const DEFAULTS = { prep: 45, resp: 120, count: 3, retake: false };
+const DEFAULTS = { prep: 45, resp: 120, count: 3, retake: false, mode: 'varied' };
 const loadSettings = () => {
   try {
     return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('cdu-settings') || '{}') };
@@ -15,15 +17,6 @@ const pickMime = () =>
   ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'].find(
     (t) => window.MediaRecorder && MediaRecorder.isTypeSupported(t)
   ) || '';
-
-function drawQuestions(n) {
-  // One question per distinct category, shuffled — like a varied real set.
-  const cats = [...CATEGORIES].sort(() => Math.random() - 0.5).slice(0, n);
-  return cats.map((c) => {
-    const pool = QUESTIONS.filter((q) => q.cat === c);
-    return pool[Math.floor(Math.random() * pool.length)];
-  });
-}
 
 /* ---------- media hook ---------- */
 function useMedia() {
@@ -159,6 +152,7 @@ function Home({ go, settings, setSettings }) {
 
       <div className="row">
         <button className="primary" onClick={() => go('setup')}>Start mock interview</button>
+        <button onClick={() => go('bank')}>Question bank</button>
         <button onClick={() => go('history')}>My recordings</button>
         <button onClick={() => go('tips')}>Tips</button>
       </div>
@@ -170,7 +164,7 @@ function Home({ go, settings, setSettings }) {
   );
 }
 
-function Setup({ media, go }) {
+function Setup({ media, go, bank }) {
   const { stream, error, devices, camId, micId, setCamId, setMicId, start } = media;
   useEffect(() => {
     if (!stream) start();
@@ -202,6 +196,10 @@ function Setup({ media, go }) {
         <li>Face centered, camera at eye level</li><li>Light in front of you, not behind</li>
         <li>Quiet room, notifications off</li><li>Plugged in, stable internet</li>
       </ul>
+      <p className="fine">
+        Question bank: {bank.filter((x) => x.on).length} of {bank.length} questions enabled.{' '}
+        <button className="link" onClick={() => go('bank')}>Customize</button>
+      </p>
       <div className="row">
         <button onClick={() => go('home')}>Back</button>
         {error && <button onClick={() => start()}>Retry</button>}
@@ -211,14 +209,15 @@ function Setup({ media, go }) {
   );
 }
 
-function Details({ settings, go, begin }) {
+function Details({ settings, go, begin, bank }) {
+  const avail = bank.filter((x) => x.on).length;
   return (
     <div className="card wide">
       <h2>Assessment details</h2>
       <table className="det">
         <tbody>
           <tr><td>Format</td><td>One-way video interview (situational)</td></tr>
-          <tr><td>Questions</td><td>{settings.count}</td></tr>
+          <tr><td>Questions</td><td>{Math.min(settings.count, avail)}{avail < settings.count && ` (only ${avail} enabled)`}</td></tr>
           <tr><td>Prep time per question</td><td>{settings.prep ? `${settings.prep} seconds` : 'None'}</td></tr>
           <tr><td>Response time per question</td><td>{fmt(settings.resp)}</td></tr>
           <tr><td>Approx. total</td><td>{Math.ceil((settings.count * (settings.prep + settings.resp)) / 60)} min</td></tr>
@@ -233,7 +232,7 @@ function Details({ settings, go, begin }) {
       <div className="row">
         <button onClick={() => go('setup')}>Back</button>
         <button onClick={() => begin(true)}>Try a practice question</button>
-        <button className="primary" onClick={() => begin(false)}>Begin interview</button>
+        <button className="primary" disabled={!avail} onClick={() => begin(false)}>Begin interview</button>
       </div>
     </div>
   );
@@ -353,8 +352,8 @@ function ReviewPlayer({ blob, className = '' }) {
   return <video className={`live play ${className}`} src={url} controls playsInline />;
 }
 
-function Interview({ media, settings, practiceFirst, go }) {
-  const [qs] = useState(() => (practiceFirst ? [PRACTICE_QUESTION] : drawQuestions(settings.count)));
+function Interview({ media, settings, bank, practiceFirst, go }) {
+  const [qs] = useState(() => (practiceFirst ? [PRACTICE_QUESTION] : drawQuestions(bank, settings.count, settings.mode)));
   const [i, setI] = useState(0);
   const [answers, setAnswers] = useState([]);
   const practice = practiceFirst;
@@ -494,9 +493,18 @@ export default function App() {
   const [settings, setSettings] = useState(loadSettings);
   const [practice, setPractice] = useState(false);
   const [runId, setRunId] = useState(0);
+  const [bank, setBankState] = useState(loadBank);
+  const [prev, setPrev] = useState('home');
+  const setBank = (b) => { setBankState(b); saveBank(b); };
+  const setSetting = (k, v) => {
+    const n = { ...settings, [k]: v };
+    setSettings(n);
+    localStorage.setItem('cdu-settings', JSON.stringify(n));
+  };
   const media = useMedia();
 
   const go = (s, p) => {
+    if (s === 'bank') setPrev(screen);
     setPayload(p ?? null);
     setScreen(s);
     if (s === 'home' || s === 'history' || s === 'tips') media.stop();
@@ -511,11 +519,12 @@ export default function App() {
       <header><span className="logo">◆</span> CDU Interview Practice <small>unofficial simulator</small></header>
       <main>
         {screen === 'home' && <Home go={go} settings={settings} setSettings={setSettings} />}
-        {screen === 'setup' && <Setup media={media} go={go} />}
-        {screen === 'details' && <Details settings={settings} go={go} begin={begin} />}
-        {screen === 'run' && <Interview key={runId} media={media} settings={settings} practiceFirst={practice} go={go} />}
+        {screen === 'setup' && <Setup media={media} go={go} bank={bank} />}
+        {screen === 'details' && <Details settings={settings} go={go} begin={begin} bank={bank} />}
+        {screen === 'run' && <Interview key={runId} media={media} bank={bank} settings={settings} practiceFirst={practice} go={go} />}
         {screen === 'summary' && <Summary session={payload} go={go} />}
         {screen === 'history' && <History go={go} />}
+        {screen === 'bank' && <QuestionBank bank={bank} setBank={setBank} settings={settings} setSetting={setSetting} go={go} back={() => go(prev === 'bank' ? 'home' : prev)} />}
         {screen === 'tips' && <Tips go={go} />}
       </main>
     </>
